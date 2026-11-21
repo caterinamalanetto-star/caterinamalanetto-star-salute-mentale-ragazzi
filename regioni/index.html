@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuropsichiatria infantile, letti e strutture per regione – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<style>
+  .r-toggle { display: inline-flex; flex-wrap: wrap; gap: 0; margin: 4px 0 12px; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; }
+  .r-toggle button { font: 500 13px/1 var(--sans); color: var(--ink-2); background: none; border: 0; border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+  .r-toggle button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .r-toggle button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Neuropsichiatria infantile, cinque regioni senza un letto</h1>
+    <p class="r-sub">Posti letto di degenza ordinaria nei reparti di neuropsichiatria infantile e utenti delle strutture residenziali e diurne per bambini e ragazzi, per regione. Anno 2023, valori assoluti</p>
+  </header>
+
+  <div class="r-big" id="big" aria-hidden="true">
+    <span class="r-big__num" id="big-num">&nbsp;</span>
+    <span class="r-big__label" id="big-label"></span>
+  </div>
+
+  <figure class="r-chart" id="chart">
+    <div class="r-toggle" role="group" aria-label="Scegli il dato">
+      <button type="button" data-k="letti" aria-pressed="true">Letti di ricovero</button>
+      <button type="button" data-k="res" aria-pressed="false">Residenze e centri diurni</button>
+    </div>
+  </figure>
+  <p class="r-note" id="nota"></p>
+
+  <footer class="r-foot">
+    <span>Fonte: Ministero della Salute, open data «Posti letto per stabilimento ospedaliero e disciplina» 2023 (disciplina 33) e Annuario statistico del Ssn 2023 (tav. STS 10)</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  function tweenD(s, f) { if (s.attrTween) s.attrTween("d", f); else s.attr("d", function (d) { return f.call(this, d)(1); }); }
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  var META = {
+    letti: { lab: "letti di degenza ordinaria", zero: "nessun letto",
+      note: "Letti di degenza ordinaria nei reparti di neuropsichiatria infantile di ospedali pubblici e privati accreditati, al 2023. Nel 2025, secondo il ministero, in Italia sono 452: il dato per regione non è stato diffuso. Valori assoluti, non rapportati alla popolazione. Dove mancano i letti, i ragazzi possono essere ricoverati in pediatria, in psichiatria per adulti o fuori regione." },
+    res: { lab: "utenti delle strutture residenziali e diurne", zero: "nessuna struttura",
+      note: "Utenti delle strutture residenziali e semiresidenziali di neuropsichiatria dell'infanzia e dell'adolescenza censite dal ministero nel 2023. Lo stesso ragazzo può essere contato due volte se passa da una struttura all'altra; il modo in cui le Regioni classificano le strutture può variare. Valori assoluti." }
+  };
+  R.loadCSV("../data/regioni-npi-2023.csv").then(function (rows) {
+    var data = rows.map(function (r) {
+      return { k: r["Regione"], s: r["Nome breve"], letti: R.num(r["Letti ordinari NPI"]), dh: R.num(r["Posti day hospital NPI"]), res: R.num(r["Utenti strutture residenziali e diurne NPIA"]) };
+    });
+    var zeroL = data.filter(function (d) { return d.letti === 0; });
+    var totL = d3.sum(data, function (d) { return d.letti; });
+
+    var bigNum = d3.select("#big-num");
+    d3.select("#big-label").text("regioni senza un letto di ricovero ordinario in neuropsichiatria infantile nel 2023: " +
+      zeroL.map(function (d) { return d.k; }).join(", "));
+    if (R.reduced) bigNum.text(zeroL.length);
+    else { bigNum.text("0"); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, zeroL.length, f0, "play"); }); }
+
+    var key = "letti";
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+    var lastW = 0;
+
+    d3.selectAll(".r-toggle button").on("click", function () {
+      key = this.getAttribute("data-k");
+      d3.selectAll(".r-toggle button").attr("aria-pressed", function () { return this.getAttribute("data-k") === key ? "true" : "false"; });
+      tip.hide();
+      draw(lastW, "play");
+    });
+
+    R.responsive(host, function (W, phase) { lastW = W; draw(W, phase); });
+
+    function draw(W, phase) {
+      var narrow = R.isNarrow(W);
+      d3.select("#nota").text(META[key].note);
+      var sorted = data.slice().sort(function (a, b) { return d3.descending(a[key], b[key]) || d3.ascending(a.k, b.k); });
+      var labW = narrow ? 96 : 168;
+      var row = narrow ? 25 : 26, bh = narrow ? 15 : 16;
+      var m = { top: 4, right: 8, bottom: 4, left: labW };
+      var H = m.top + m.bottom + row * sorted.length;
+      var w = W - m.left - m.right;
+      var x = d3.scaleLinear().domain([0, d3.max(sorted, function (d) { return d[key]; })]).range([0, w - (narrow ? 96 : 120)]);
+      var by = function (i) { return i * row + (row - bh) / 2; };
+      var isZero = function (d) { return d[key] === 0; };
+      var top = sorted[0], tot = d3.sum(sorted, function (d) { return d[key]; });
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre per regione, " + META[key].lab + " in neuropsichiatria infantile nel 2023. " +
+          top.k + " ne ha " + f0(top[key]) + " su " + f0(tot) + ". Regioni con " + META[key].zero + ": " +
+          sorted.filter(isZero).map(function (d) { return d.k; }).join(", ") + ".");
+      svg.append("title").text("Neuropsichiatria infantile per regione, 2023");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("g").selectAll("text").data(sorted).join("text").attr("class", "tick-label")
+        .attr("x", -10).attr("text-anchor", "end")
+        .attr("y", function (d, i) { return by(i) + bh / 2; }).attr("dy", "0.35em")
+        .style("fill", function (d) { return isZero(d) ? "var(--red)" : "var(--ink)"; })
+        .style("font-weight", function (d) { return isZero(d) ? 600 : null; })
+        .text(function (d) { return narrow ? d.s : d.k; });
+      g.append("line").attr("class", "baseline").attr("x1", 0.5).attr("x2", 0.5).attr("y1", 0).attr("y2", row * sorted.length);
+
+      var nz = sorted.filter(function (d) { return !isZero(d); });
+      var bars = g.append("g").selectAll("path").data(nz).join("path").attr("class", "mark")
+        .style("fill", function (d) { return d === top ? "var(--blue)" : "var(--grey)"; });
+      R.enter(bars, phase,
+        function (s) { s.attr("d", function (d) { return R.barPathH(1, by(sorted.indexOf(d)), 0, bh, 2); }); },
+        function (s) { tweenD(s, function (d) { var i = sorted.indexOf(d); return function (t) { return R.barPathH(1, by(i), Math.max(2, x(d[key])) * t, bh, 2); }; }); });
+
+      var vals = g.append("g").selectAll("text").data(sorted).join("text").attr("class", "val-label mark")
+        .attr("x", function (d) { return isZero(d) ? 8 : Math.max(2, x(d[key])) + 7; })
+        .attr("y", function (d, i) { return by(i) + bh / 2; }).attr("dy", "0.35em")
+        .style("fill", function (d) { return isZero(d) ? "var(--red)" : null; })
+        .style("font-weight", function (d) { return isZero(d) ? 600 : null; });
+      vals.each(function (d) {
+        var s = d3.select(this);
+        if (isZero(d)) s.text(META[key].zero);
+        else R.countUp(s, d[key], f0, phase);
+      });
+
+      clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(sorted).join("rect").attr("class", "hit")
+        .attr("x", -labW).attr("width", W).attr("y", function (d, i) { return i * row; }).attr("height", row)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          var i = sorted.indexOf(d);
+          tip.show(R.tipHTML({ title: d.k, value: isZero(d) ? META[key].zero : f0(d[key]), unit: isZero(d) ? null : META[key].lab,
+            rows: [["Letti di degenza ordinaria", f0(d.letti)], ["Posti in day hospital", f0(d.dh)], ["Utenti strutture residenziali e diurne", f0(d.res)]] }),
+            Math.min(Math.max(2, x(d[key])) + m.left + 40, W - 20), by(i) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+      R.scheduleHeight();
+    }
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>
