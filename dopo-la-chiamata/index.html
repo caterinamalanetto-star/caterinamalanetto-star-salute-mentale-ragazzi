@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dopo la chiamata: chi interviene – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Dopo la chiamata il caso va in Procura, quasi mai dal medico</h1>
+    <p class="r-sub">Quando la linea d'ascolto 1.96.96 di Telefono Azzurro passa un caso a un servizio esterno, a chi lo affida. In % dei casi con attivazione, 2025</p>
+  </header>
+
+  <figure class="r-chart" id="chart"></figure>
+  <p class="r-note">Per ogni caso si conta solo il servizio prevalente. Il dossier non indica quanti casi arrivano all'attivazione di un servizio esterno: molti si chiudono con l'ascolto e la consulenza, altri si interrompono.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: Telefono Azzurro, dossier «Ascoltare il disagio, leggere i bisogni», servizio 1.96.96, figura 10</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  // attrTween esiste solo sulle transizioni: in fase "static" applico subito lo stato finale
+  function tweenD(s, f) { if (s.attrTween) s.attrTween("d", f); else s.attr("d", function (d) { return f.call(this, d)(1); }); }
+  var R = Radar, fmt = R.fmt, f1 = function (v) { return fmt(v, 1) + "%"; };
+  R.loadCSV("../data/attivazioni-1-96-96.csv").then(function (rows) {
+    var data = rows.map(function (r) { return { k: r["Servizio esterno prevalente"], v: R.num(r["Quota dei casi con attivazione (%)"]) }; });
+    var hot = data.find(function (d) { return /sanitario/i.test(d.k); });
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var labW = narrow ? 0 : 230;
+      var row = narrow ? 52 : 40, bh = narrow ? 18 : 22;
+      var m = { top: 4, right: 8, bottom: 4, left: labW };
+      var H = m.top + m.bottom + row * data.length;
+      var w = W - m.left - m.right;
+      var x = d3.scaleLinear().domain([0, d3.max(data, function (d) { return d.v; })]).range([0, w - 64]);
+      var by = function (i) { return i * row + (narrow ? 24 : (row - bh) / 2); };
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre: quando il 1.96.96 attiva un servizio esterno, nel " + f1(data[0].v) + " dei casi si tratta di " + data[0].k +
+          ". Il Servizio sanitario nazionale è il servizio prevalente solo nel " + f1(hot.v) + " dei casi.");
+      svg.append("title").text("Servizio esterno prevalente attivato dal 1.96.96");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("g").selectAll("text").data(data).join("text").attr("class", "tick-label")
+        .attr("x", narrow ? 0 : -12).attr("text-anchor", narrow ? "start" : "end")
+        .attr("y", function (d, i) { return narrow ? by(i) - 8 : by(i) + bh / 2; }).attr("dy", narrow ? 0 : "0.35em")
+        .style("fill", function (d) { return d === hot ? "var(--red)" : "var(--ink)"; })
+        .style("font-weight", function (d) { return d === hot ? 600 : null; })
+        .text(function (d) { return d.k; });
+      if (!narrow) g.append("line").attr("class", "baseline").attr("x1", 0.5).attr("x2", 0.5).attr("y1", 0).attr("y2", row * data.length);
+
+      var bars = g.append("g").selectAll("path").data(data).join("path").attr("class", "mark")
+        .style("fill", function (d) { return d === hot ? "var(--red)" : "var(--blue)"; });
+      R.enter(bars, phase,
+        function (s) { s.attr("d", function (d, i) { return R.barPathH(1, by(i), 0, bh, 2); }); },
+        function (s) { tweenD(s, function (d) { var i = data.indexOf(d); return function (t) { return R.barPathH(1, by(i), Math.max(2, x(d.v)) * t, bh, 2); }; }); });
+
+      var vals = g.append("g").selectAll("text").data(data).join("text").attr("class", "val-label mark")
+        .attr("x", function (d) { return Math.max(2, x(d.v)) + 8; }).attr("y", function (d, i) { return by(i) + bh / 2; }).attr("dy", "0.35em")
+        .style("fill", function (d) { return d === hot ? "var(--red)" : null; });
+      vals.each(function (d) { var s = d3.select(this); R.countUp(s, d.v, f1, phase); });
+
+      clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(data).join("rect").attr("class", "hit")
+        .attr("x", -labW).attr("width", W).attr("y", function (d, i) { return i * row; }).attr("height", row)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          var i = data.indexOf(d);
+          tip.show(R.tipHTML({ title: d.k, value: f1(d.v), unit: "dei casi con attivazione",
+            note: d === hot ? "Chi viene indirizzato a un consultorio o alla neuropsichiatria senza segnalazione formale non compare qui." : null }),
+            Math.min(x(d.v) + m.left + 40, W - 20), by(i) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>

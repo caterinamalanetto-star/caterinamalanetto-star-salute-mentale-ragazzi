@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le diagnosi dei minori in pronto soccorso – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Disturbi del comportamento, accessi quasi triplicati in tre anni</h1>
+    <p class="r-sub">Accessi in pronto soccorso di bambini e ragazzi fino a 17 anni per gruppo di diagnosi psichiatrica: il cerchio vuoto è il 2021, il pallino pieno il 2024</p>
+  </header>
+
+  <figure class="r-chart" id="chart">
+    <div class="r-key" id="key" style="margin:0 0 8px"></div>
+  </figure>
+  <p class="r-note">Accessi, non persone. Gruppi diagnostici del Ministero della Salute; i disturbi d'ansia rientrano nelle sindromi nevrotiche e somatoformi.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: Ministero della Salute, Rapporto salute mentale 2021 e 2024 (NSIS-EMUR), tab. 12.6.1</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  R.loadCSV("../data/diagnosi-pronto-soccorso-minori.csv").then(function (rows) {
+    var data = rows.map(function (r) {
+      var a = R.num(r["2021"]), b = R.num(r["2024"]);
+      return { k: r["Gruppo diagnostico"], a: a, b: b, ch: b / a - 1, m: R.num(r["Maschi 2024"]), f: R.num(r["Femmine 2024"]) };
+    }).sort(function (p, q) { return q.b - p.b; });
+    // in rosso il gruppo cresciuto di più tra quelli con almeno mille accessi
+    var hot = d3.greatest(data.filter(function (d) { return d.a >= 1000; }), function (d) { return d.ch; });
+    function sgn(v) { return (v >= 0 ? "+" : "−") + fmt(Math.abs(v) * 100, 0) + "%"; }
+
+    d3.select("#key").html('<span><i class="sw sw--ring" style="border-color:var(--grey)"></i>2021</span><span><i class="sw" style="background:var(--blue)"></i>2024</span><span><i class="sw" style="background:var(--red)"></i>' + hot.k + ", " + sgn(hot.ch) + "</span>");
+
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var labW = narrow ? 0 : Math.min(310, Math.round(W * 0.42));
+      var row = narrow ? 50 : 36;
+      var m = { top: 6, right: 54, bottom: 26, left: labW };
+      var H = m.top + m.bottom + row * data.length;
+      var w = W - m.left - m.right;
+      var x = d3.scaleLinear().domain([0, d3.max(data, function (d) { return d.b; })]).nice().range([0, w]);
+      var cy = function (i) { return i * row + (narrow ? 32 : row / 2); };
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a punti: dal 2021 al 2024 gli accessi in pronto soccorso di minori crescono in quasi tutti i gruppi di diagnosi. " +
+          hot.k + " passano da " + f0(hot.a) + " a " + f0(hot.b) + ", " + sgn(hot.ch) + ". Il gruppo più numeroso è " + data[0].k + " con " + f0(data[0].b) + " accessi nel 2024.");
+      svg.append("title").text("Accessi di minori in pronto soccorso per gruppo di diagnosi, 2021 e 2024");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      var ticks = x.ticks(narrow ? 3 : 5);
+      g.append("g").attr("class", "grid").selectAll("line").data(ticks).join("line")
+        .attr("x1", function (d) { return Math.round(x(d)) + 0.5; }).attr("x2", function (d) { return Math.round(x(d)) + 0.5; })
+        .attr("y1", 0).attr("y2", row * data.length);
+      g.append("g").selectAll("text").data(ticks).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (d) { return x(d); }).attr("y", row * data.length + 18).text(f0);
+
+      var rowsG = g.append("g").selectAll("g").data(data).join("g").attr("class", "mark");
+      rowsG.append("text").attr("class", "tick-label")
+        .attr("x", narrow ? 0 : -12).attr("y", function (d, i) { return narrow ? cy(i) - 16 : cy(i); }).attr("dy", "0.35em")
+        .attr("text-anchor", narrow ? "start" : "end")
+        .style("fill", function (d) { return d === hot ? "var(--red)" : "var(--ink)"; })
+        .style("font-weight", function (d) { return d === hot ? 600 : null; })
+        .text(function (d) { return d.k; });
+      var seg = rowsG.append("line").attr("y1", function (d, i) { return cy(i); }).attr("y2", function (d, i) { return cy(i); })
+        .style("stroke", function (d) { return d === hot ? "var(--red)" : "var(--blue-4)"; }).attr("stroke-width", 2.5).attr("stroke-linecap", "round")
+        .attr("x1", function (d) { return x(d.a); });
+      rowsG.append("circle").attr("cx", function (d) { return x(d.a); }).attr("cy", function (d, i) { return cy(i); }).attr("r", 5)
+        .style("fill", "var(--bg)").style("stroke", "var(--grey)").attr("stroke-width", 1.75);
+      var dot = rowsG.append("circle").attr("cy", function (d, i) { return cy(i); }).attr("r", 6)
+        .style("fill", function (d) { return d === hot ? "var(--red)" : "var(--blue)"; }).style("stroke", "var(--bg)").attr("stroke-width", 1.5);
+      var lab = rowsG.append("text").attr("class", "val-label").attr("y", function (d, i) { return cy(i); }).attr("dy", "0.35em")
+        .style("fill", function (d) { return d === hot ? "var(--red)" : null; })
+        .text(function (d) { return sgn(d.ch); });
+
+      R.enter(seg, phase, function (s) { s.attr("x2", function (d) { return x(d.a); }); }, function (s) { s.attr("x2", function (d) { return x(d.b); }); });
+      R.enter(dot, phase, function (s) { s.attr("cx", function (d) { return x(d.a); }); }, function (s) { s.attr("cx", function (d) { return x(d.b); }); });
+      R.enter(lab, phase, function (s) { s.attr("x", function (d) { return Math.max(x(d.a), x(d.b)) + 12; }).style("opacity", 0); },
+        function (s) { s.attr("x", function (d) { return Math.max(x(d.a), x(d.b)) + 12; }).style("opacity", 1); }, R.DUR * 0.6);
+
+      clear = function () { rowsG.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(data).join("rect").attr("class", "hit")
+        .attr("x", -labW).attr("width", W).attr("y", function (d, i) { return i * row; }).attr("height", row)
+        .on("pointerenter pointerdown", function (ev, d) {
+          rowsG.classed("is-dimmed", function (q) { return q !== d; });
+          var i = data.indexOf(d);
+          tip.show(R.tipHTML({
+            title: d.k, value: f0(d.b), unit: "accessi nel 2024",
+            rows: [["Nel 2021", f0(d.a)], ["Variazione", sgn(d.ch)], ["Ragazze 2024", f0(d.f)], ["Ragazzi 2024", f0(d.m)]],
+            note: d.a < 1000 ? "Numeri piccoli: le variazioni percentuali vanno lette con cautela." : null
+          }), Math.min(x(d.b) + m.left, W - 20), cy(i) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>

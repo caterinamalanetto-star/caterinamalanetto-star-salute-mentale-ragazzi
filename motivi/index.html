@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perché i ragazzi chiamano il 1.96.96 – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<style>
+  .r-toggle { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 10px; }
+  .r-toggle button { font: 500 13px/1 var(--sans); color: var(--ink-2); background: none; border: 1px solid var(--rule); border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+  .r-toggle button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .r-toggle button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Salute mentale, il primo motivo per cui i ragazzi chiedono aiuto</h1>
+    <p class="r-sub">Più di un caso su tre arrivato nel 2025 alla linea d'ascolto 1.96.96 di Telefono Azzurro. Tocca un'area per vedere cosa c'è dentro</p>
+  </header>
+
+  <figure class="r-chart" id="aree">
+    <p class="r-chart__head">Le aree di bisogno</p>
+    <p class="r-chart__sub">% sul totale dei casi</p>
+  </figure>
+
+  <figure class="r-chart" id="dettaglio">
+    <p class="r-chart__head" id="det-head"></p>
+    <p class="r-chart__sub">% sui casi dell'area. Tocca un'area per cambiare</p>
+    <div class="r-toggle" role="group" aria-label="Scegli l'area di bisogno" id="tg"></div>
+  </figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Telefono Azzurro, dossier «Ascoltare il disagio, leggere i bisogni», servizio 1.96.96</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  // attrTween esiste solo sulle transizioni: in fase "static" applico subito lo stato finale
+  function tweenD(s, f) { if (s.attrTween) s.attrTween("d", f); else s.attr("d", function (d) { return f.call(this, d)(1); }); }
+  var R = Radar, fmt = R.fmt, f1 = function (v) { return fmt(v, 1) + "%"; };
+  R.loadCSV("../data/aree-bisogno-1-96-96.csv").then(function (rows) {
+    var areas = [];
+    rows.forEach(function (r) {
+      var a = areas.find(function (q) { return q.k === r["Area"]; });
+      if (!a) { a = { k: r["Area"], v: R.num(r["Quota sul totale (%)"]), cats: [] }; areas.push(a); }
+      a.cats.push({ k: r["Categoria"], v: R.num(r["Quota nell'area (%)"]) });
+    });
+    var other = 100 - d3.sum(areas, function (a) { return a.v; });
+    var bars1 = areas.concat([{ k: "Altre aree", v: Math.round(other * 10) / 10, cats: null }]);
+    var sel = areas[0];
+
+    // ---------- Grafico 1: aree ----------
+    function hbars(host, data, opts) {
+      var tip = R.tooltip(host), clear = function () {};
+      R.dismissOutside(host, function () { tip.hide(); clear(); });
+      var api = {};
+      R.responsive(host, function (W, phase) { api.draw = function (ph) { draw(W, ph); }; draw(W, phase); });
+      function draw(W, phase) {
+        var d0 = opts.data();
+        var narrow = R.isNarrow(W);
+        var labW = narrow ? 0 : 250, row = narrow ? 48 : 36, bh = narrow ? 16 : 20;
+        var m = { top: 4, right: 8, bottom: 4, left: labW };
+        var H = m.top + m.bottom + row * d0.length, w = W - m.left - m.right;
+        var x = d3.scaleLinear().domain([0, opts.max]).range([0, w - 56]);
+        var by = function (i) { return i * row + (narrow ? 22 : (row - bh) / 2); };
+        d3.select(host).select("svg").remove();
+        var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img").attr("aria-label", opts.aria(d0));
+        svg.append("title").text(opts.title(d0));
+        var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+        var labs = g.append("g").selectAll("text").data(d0).join("text").attr("class", "tick-label")
+          .attr("x", narrow ? 0 : -12).attr("text-anchor", narrow ? "start" : "end")
+          .attr("y", function (d, i) { return narrow ? by(i) - 7 : by(i) + bh / 2; }).attr("dy", narrow ? 0 : "0.35em")
+          .style("fill", function (d) { return opts.isHot(d) ? "var(--ink)" : "var(--ink-2)"; })
+          .style("font-weight", function (d) { return opts.isHot(d) ? 600 : null; })
+          .text(function (d) { return d.k; });
+        if (!narrow) g.append("line").attr("class", "baseline").attr("x1", 0.5).attr("x2", 0.5).attr("y1", 0).attr("y2", row * d0.length);
+        var bars = g.append("g").selectAll("path").data(d0).join("path").attr("class", "mark").style("fill", opts.color);
+        R.enter(bars, phase,
+          function (s) { s.attr("d", function (d, i) { return R.barPathH(1, by(i), 0, bh, 2); }); },
+          function (s) { tweenD(s, function (d) { var i = d0.indexOf(d); return function (t) { return R.barPathH(1, by(i), Math.max(2, x(d.v)) * t, bh, 2); }; }); });
+        var vals = g.append("g").selectAll("text").data(d0).join("text").attr("class", "val-label mark")
+          .attr("x", function (d) { return Math.max(2, x(d.v)) + 8; }).attr("y", function (d, i) { return by(i) + bh / 2; }).attr("dy", "0.35em");
+        vals.each(function (d) { R.countUp(d3.select(this), d.v, f1, phase); });
+        clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+        g.append("g").selectAll("rect").data(d0).join("rect").attr("class", "hit")
+          .attr("x", -labW).attr("width", W).attr("y", function (d, i) { return i * row; }).attr("height", row)
+          .style("cursor", function (d) { return opts.onPick && d.cats ? "pointer" : null; })
+          .on("pointerenter", function (ev, d) {
+            bars.classed("is-dimmed", function (q) { return q !== d; });
+            vals.classed("is-dimmed", function (q) { return q !== d; });
+            var i = d0.indexOf(d);
+            tip.show(opts.tip(d), Math.min(x(d.v) + m.left + 40, W - 20), by(i) + m.top);
+          })
+          .on("pointerdown", function (ev, d) { if (opts.onPick && d.cats) opts.onPick(d); })
+          .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+      }
+      return api;
+    }
+
+    var c1 = hbars(document.getElementById("aree"), bars1, {
+      data: function () { return bars1; }, max: d3.max(bars1, function (d) { return d.v; }),
+      color: function (d) { return d.cats == null ? "var(--grey-light)" : d === sel ? "var(--blue)" : "var(--blue-4)"; },
+      isHot: function (d) { return d === sel; },
+      aria: function (d) { return "Grafico a barre: le aree di bisogno del 1.96.96. " + d.map(function (q) { return q.k + " " + f1(q.v); }).join(", ") + "."; },
+      title: function () { return "Aree di bisogno principali dei casi del 1.96.96"; },
+      tip: function (d) { return R.tipHTML({ title: d.k, value: f1(d.v), unit: "dei casi", note: d.cats ? "Tocca per vedere il dettaglio" : "Aree con quote minori, calcolate per differenza" }); },
+      onPick: function (d) { pick(d); }
+    });
+
+    // ---------- Grafico 2: dettaglio dell'area ----------
+    var tg = d3.select("#tg").selectAll("button").data(areas).join("button").attr("type", "button")
+      .text(function (d) { return d.k; }).on("click", function (ev, d) { pick(d); });
+    var c2 = hbars(document.getElementById("dettaglio"), null, {
+      data: function () { return sel.cats; }, max: 100,
+      color: function (d) { return sel.cats.indexOf(d) === 0 ? "var(--blue)" : "var(--blue-4)"; },
+      isHot: function (d) { return sel.cats.indexOf(d) === 0; },
+      aria: function (d) { return "Grafico a barre: le prime cinque situazioni nell'area " + sel.k + ". " + d.map(function (q) { return q.k + " " + f1(q.v); }).join(", ") + "."; },
+      title: function () { return "Prime cinque situazioni nell'area " + sel.k; },
+      tip: function (d) { return R.tipHTML({ title: d.k, value: f1(d.v), unit: "dei casi dell'area", rows: [["Sul totale dei casi", "circa " + fmt(d.v * sel.v / 100, 1) + "%"]] }); }
+    });
+    function sync() {
+      tg.attr("aria-pressed", function (d) { return d === sel ? "true" : "false"; });
+      d3.select("#det-head").text("Dentro l'area «" + sel.k + "»");
+    }
+    function pick(d) {
+      sel = d; sync();
+      if (c1.draw) c1.draw("static");
+      if (c2.draw) c2.draw("play");
+    }
+    sync();
+  }).catch(function (e) { R.fail("#aree", e); });
+})();
+</script>
+</body>
+</html>

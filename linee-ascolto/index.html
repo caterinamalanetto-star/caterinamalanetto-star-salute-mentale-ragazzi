@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le linee d'ascolto di Telefono Azzurro – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Sos ragazzi, i casi al 114 raddoppiano in sei anni</h1>
+    <p class="r-sub">Casi gestiti ogni anno dalle due linee di Telefono Azzurro: il 114 per le emergenze e il 1.96.96 per l'ascolto, che dopo il picco del Covid torna a salire</p>
+  </header>
+
+  <figure class="r-chart" id="chart">
+    <div class="r-key" id="key" style="margin:0 0 6px"></div>
+  </figure>
+  <p class="r-note">Dati di ciascun anno come riportati nel bilancio sociale di quell'anno: in alcuni bilanci successivi gli stessi anni compaiono con piccole differenze (per esempio il 114 nel 2019: 1.718 o 1.760 casi).</p>
+
+  <footer class="r-foot">
+    <span>Fonte: Telefono Azzurro, bilanci sociali 2019-2025</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  R.loadCSV("../data/casi-linee-ascolto.csv").then(function (rows) {
+    var years = rows.map(function (r) { return +r["Anno"]; });
+    var S = [
+      { k: "1.96.96", col: "1.96.96", c: "var(--blue)", sub: "ascolto e consulenza" },
+      { k: "114", col: "114 Emergenza Infanzia", c: "var(--grey-dark)", sub: "emergenza infanzia" }
+    ];
+    S.forEach(function (s) {
+      s.pts = rows.map(function (r) { return { y: +r["Anno"], v: R.num(r[s.col]) }; }).filter(function (p) { return p.v != null; });
+      s.first = s.pts[0]; s.last = s.pts[s.pts.length - 1];
+    });
+    var a = S[0], b = S[1];
+    var peak = d3.greatest(a.pts, function (p) { return p.v; });
+
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      d3.select("#key").html(narrow ? S.map(function (s) { return '<span><i class="sw" style="background:' + s.c + '"></i>' + s.k + " (" + s.sub + ")</span>"; }).join("") : "")
+        .style("display", narrow ? null : "none");
+      var m = { top: 30, right: narrow ? 16 : 150, bottom: 28, left: narrow ? 40 : 46 };
+      var H = narrow ? 300 : 360;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+      var x = d3.scaleLinear().domain([d3.min(years) - 0.25, d3.max(years) + 0.25]).range([0, w]);
+      var y = d3.scaleLinear().domain([0, d3.max(S, function (s) { return d3.max(s.pts, function (p) { return p.v; }); })]).nice().range([h, 0]);
+      var yt = y.ticks(4);
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a linee: il 114 Emergenza Infanzia passa da " + f0(b.first.v) + " casi nel " + b.first.y + " a " + f0(b.last.v) + " nel " + b.last.y +
+          ". Il 1.96.96 ha un picco di " + f0(peak.v) + " casi nel " + peak.y + ", scende a " + f0(d3.min(a.pts, function (p) { return p.v; })) + " e risale a " + f0(a.last.v) + " nel " + a.last.y + ".");
+      svg.append("title").text("Casi gestiti dalle linee 1.96.96 e 114 per anno");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("g").attr("class", "grid").selectAll("line").data(yt).join("line")
+        .attr("x1", 0).attr("x2", w).attr("y1", function (d) { return Math.round(y(d)) + 0.5; }).attr("y2", function (d) { return Math.round(y(d)) + 0.5; })
+        .attr("class", function (d) { return d === 0 ? "baseline" : null; });
+      g.append("g").selectAll("text").data(yt).join("text").attr("class", "tick-label").attr("text-anchor", "end")
+        .attr("x", -8).attr("y", function (d) { return y(d); }).attr("dy", "0.35em").text(f0);
+      g.append("g").selectAll("text").data(years).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (d) { return x(d); }).attr("y", h + 19).text(function (d) { return narrow ? "’" + String(d).slice(2) : d; });
+
+      // annotazione Covid sul picco del 1.96.96
+      var an = g.append("g").attr("class", "anno");
+      var px = x(peak.y), py = y(peak.v);
+      an.append("path").attr("d", "M" + px + "," + (py - 8) + "V" + (-m.top + 22));
+      an.append("circle").attr("cx", px).attr("cy", py - 8).attr("r", 1.75);
+      an.append("text").attr("x", px + 6).attr("y", -m.top + 18).text(peak.y + ", l'anno del Covid");
+      R.enter(an, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.6);
+
+      var line = d3.line().curve(d3.curveMonotoneX).x(function (p) { return x(p.y); }).y(function (p) { return y(p.v); });
+      var dots = [];
+      S.forEach(function (s, si) {
+        // tratti continui (curvi) sugli anni consecutivi, tratteggio dritto sui buchi
+        var runs = [[s.pts[0]]];
+        for (var i = 1; i < s.pts.length; i++) {
+          if (s.pts[i].y - s.pts[i - 1].y > 1) runs.push([]);
+          runs[runs.length - 1].push(s.pts[i]);
+        }
+        runs.forEach(function (run, ri) {
+          if (ri > 0) {
+            var p0 = runs[ri - 1][runs[ri - 1].length - 1], p1 = run[0];
+            var gp = g.append("path").attr("d", "M" + x(p0.y) + "," + y(p0.v) + "L" + x(p1.y) + "," + y(p1.v))
+              .style("fill", "none").style("stroke", s.c).attr("stroke-width", 1.5).attr("stroke-dasharray", "3 4").attr("class", "mark s" + si);
+            R.enter(gp, phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, (x(p0.y) / w) * R.DUR);
+          }
+          if (run.length < 2) return;
+          var rp = g.append("path").datum(run).attr("d", line).style("fill", "none").style("stroke", s.c).attr("stroke-width", 2.25)
+            .attr("stroke-linecap", "round").attr("class", "mark s" + si);
+          var L = rp.node().getTotalLength();
+          R.enter(rp, phase, function (q) { q.attr("stroke-dasharray", L + " " + L).attr("stroke-dashoffset", L); },
+            function (q) { q.attr("stroke-dashoffset", 0); }, (x(run[0].y) / w) * R.DUR);
+        });
+        var c = g.append("g").selectAll("circle").data(s.pts).join("circle").attr("class", "mark s" + si)
+          .attr("cx", function (p) { return x(p.y); }).attr("cy", function (p) { return y(p.v); }).attr("r", 4)
+          .style("fill", s.c).style("stroke", "var(--bg)").attr("stroke-width", 1.5);
+        c.each(function (p) { R.enter(d3.select(this), phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, (x(p.y) / w) * R.DUR); });
+        dots.push(c);
+        if (!narrow) {
+          var lab = g.append("g").attr("transform", "translate(" + (x(s.last.y) + 12) + "," + y(s.last.v) + ")");
+          lab.append("text").attr("class", "series-label").attr("dy", "0.35em").style("fill", s.c).text(s.k + " · " + f0(s.last.v));
+          lab.append("text").attr("class", "series-label--sub").attr("dy", "1.65em").text(s.sub);
+          R.enter(lab, phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, R.DUR * 0.85);
+        }
+      });
+
+      var cross = g.append("line").attr("class", "crosshair").attr("y1", 0).attr("y2", h).style("opacity", 0);
+      clear = function () { cross.style("opacity", 0); };
+      g.append("rect").attr("class", "hit").attr("x", -10).attr("y", -m.top).attr("width", w + 20).attr("height", h + m.top)
+        .on("pointermove pointerdown", function (ev) {
+          var mx = d3.pointer(ev, g.node())[0];
+          var yr = d3.least(years, function (d) { return Math.abs(x(d) - mx); });
+          var r = rows.find(function (q) { return +q["Anno"] === yr; });
+          var va = R.num(r[a.col]), vb = R.num(r[b.col]);
+          cross.attr("x1", x(yr)).attr("x2", x(yr)).style("opacity", 1);
+          var top = d3.min([va, vb].filter(function (v) { return v != null; }).map(y));
+          tip.show(R.tipHTML({ title: String(yr),
+            rows: [["1.96.96", va == null ? "n.d." : f0(va)], ["114 Emergenza Infanzia", vb == null ? "n.d." : f0(vb)]],
+            note: va == null || vb == null ? "n.d.: dato non riportato nel bilancio sociale consultato (" + r["Fonte"] + ")." : r["Fonte"] }),
+            x(yr) + m.left, (top == null ? h / 2 : top) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>

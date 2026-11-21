@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minori in pronto soccorso per motivi psichiatrici – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<style>
+  .r-toggle { display: inline-flex; gap: 0; margin: 4px 0 10px; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; }
+  .r-toggle button { font: 500 13px/1 var(--sans); color: var(--ink-2); background: none; border: 0; border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+  .r-toggle button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .r-toggle button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Disagio psichico, gli accessi dei ragazzi al pronto soccorso crescono del 53%</h1>
+    <p class="r-sub">Accessi in pronto soccorso con diagnosi psichiatrica di bambini e ragazzi fino a 17 anni, Italia. Dal 2021 crescono più in fretta di quelli degli adulti</p>
+  </header>
+
+  <div class="r-big" id="big" aria-hidden="true">
+    <span class="r-big__num" id="big-num">&nbsp;</span>
+    <span class="r-big__label" id="big-label"></span>
+  </div>
+
+  <figure class="r-chart" id="chart">
+    <div class="r-toggle" role="group" aria-label="Mostra gli accessi">
+      <button type="button" data-k="tot" aria-pressed="true">Tutti</button>
+      <button type="button" data-k="f" aria-pressed="false">Ragazze</button>
+      <button type="button" data-k="m" aria-pressed="false">Ragazzi</button>
+    </div>
+  </figure>
+  <p class="r-note" id="nota"></p>
+
+  <footer class="r-foot">
+    <span>Fonte: Ministero della Salute, Rapporto salute mentale 2021-2024 (NSIS-EMUR), tab. 12.6.1</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  // attrTween esiste solo sulle transizioni: in fase "static" applico subito lo stato finale
+  function tweenD(s, f) { if (s.attrTween) s.attrTween("d", f); else s.attr("d", function (d) { return f.call(this, d)(1); }); }
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  var LAB = { tot: "accessi", f: "accessi di ragazze", m: "accessi di ragazzi" };
+
+  R.loadCSV("../data/pronto-soccorso-minori.csv").then(function (rows) {
+    var data = rows.map(function (r) {
+      return { k: r["Anno"], tot: R.num(r["Accessi 0-17"]), m: R.num(r["Maschi"]), f: R.num(r["Femmine"]), all: R.num(r["Accessi tutte le età"]) };
+    });
+    var first = data[0], last = data[data.length - 1];
+    var gMin = last.tot / first.tot - 1, gAd = (last.all - last.tot) / (first.all - first.tot) - 1;
+    function sgn(v) { return (v >= 0 ? "+" : "") + fmt(v * 100, 0) + "%"; }
+
+    // big number
+    var bigNum = d3.select("#big-num");
+    d3.select("#big-label").text("accessi di minori nel " + last.k + ", " + sgn(gMin) + " sul " + first.k + " (adulti: " + sgn(gAd) + ")");
+    if (R.reduced) bigNum.text(f0(last.tot));
+    else { bigNum.text(f0(0)); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, last.tot, f0, "play"); }); }
+
+    d3.select("#nota").text("Accessi, non persone: lo stesso ragazzo può tornare più volte. Il " + first.k +
+      " è ancora un anno condizionato dalla pandemia. Nella vista per sesso mancano i casi con sesso non specificato.");
+
+    var key = "tot";
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+    var redraw;
+
+    d3.selectAll(".r-toggle button").on("click", function () {
+      key = this.getAttribute("data-k");
+      d3.selectAll(".r-toggle button").attr("aria-pressed", function () { return this.getAttribute("data-k") === key ? "true" : "false"; });
+      tip.hide();
+      redraw();
+    });
+
+    R.responsive(host, function (W, phase) {
+      redraw = function () { draw(W, "switch"); };
+      draw(W, phase);
+    });
+
+    var prevY = null;
+    function draw(W, phase) {
+      var narrow = R.isNarrow(W);
+      var m = { top: 54, right: 0, bottom: 28, left: 0 };
+      var H = narrow ? 300 : 340;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+      var val = function (d) { return key === "f" ? d.f : key === "m" ? d.m : d.tot; };
+      var x = d3.scaleBand().domain(data.map(function (d) { return d.k; })).range([0, w]).paddingInner(narrow ? 0.28 : 0.38).paddingOuter(0.1);
+      var y = d3.scaleLinear().domain([0, d3.max(data, function (d) { return d.tot; })]).range([h, 0]);
+      var a = data[0], z = data[data.length - 1], gr = val(z) / val(a) - 1;
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre: gli " + LAB[key] + " da 0 a 17 anni in pronto soccorso con diagnosi psichiatrica passano da " +
+          f0(val(a)) + " nel " + a.k + " a " + f0(val(z)) + " nel " + z.k + ", " + sgn(gr) + ".");
+      svg.append("title").text("Accessi di minori in pronto soccorso con diagnosi psichiatrica per anno");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+      g.append("line").attr("class", "baseline").attr("x1", 0).attr("x2", w).attr("y1", h + 0.5).attr("y2", h + 0.5);
+
+      var bars = g.append("g").selectAll("path").data(data).join("path").attr("class", "mark")
+        .style("fill", function (d) { return d === z ? "var(--blue)" : "var(--grey)"; });
+      var path = function (d, t) { var v = val(d) * t; return R.barPathV(x(d.k), y(v), x.bandwidth(), h - y(v), 2); };
+      if (phase === "switch") {
+        bars.attr("d", function (d) { return prevY ? R.barPathV(x(d.k), prevY(d), x.bandwidth(), h - prevY(d), 2) : path(d, 1); })
+          .transition().duration(R.DUR * 0.6).ease(R.EASE).attr("d", function (d) { return path(d, 1); });
+      } else {
+        R.enter(bars, phase, function (s) { s.attr("d", function (d) { return path(d, 0); }); },
+          function (s) { tweenD(s, function (d) { return function (t) { return path(d, t); }; }); });
+      }
+      prevY = function (d) { return y(val(d)); };
+
+      var vals = g.append("g").selectAll("text").data(data).join("text").attr("class", "val-label mark").attr("text-anchor", "middle")
+        .attr("x", function (d) { return x(d.k) + x.bandwidth() / 2; }).attr("y", function (d) { return y(val(d)) - 7; });
+      vals.each(function (d) { R.countUp(d3.select(this), val(d), f0, phase === "switch" ? "static" : phase); });
+
+      g.append("g").selectAll("text").data(data).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (d) { return x(d.k) + x.bandwidth() / 2; }).attr("y", h + 19).text(function (d) { return d.k; });
+
+      // annotazione: variazione primo-ultimo anno
+      var an = g.append("g").attr("class", "anno");
+      var x1 = x(a.k) + x.bandwidth() / 2, x2 = x(z.k) + x.bandwidth() / 2, yy = -m.top + 16;
+      an.append("path").attr("d", "M" + x1 + "," + (y(val(a)) - 24) + "V" + (yy + 8) + "H" + x2 + "V" + (y(val(z)) - 24));
+      var t = an.append("text").attr("x", (x1 + x2) / 2).attr("y", yy).attr("text-anchor", "middle");
+      t.append("tspan").attr("font-weight", 600).text(sgn(gr) + " ");
+      t.append("tspan").text("dal " + a.k + " al " + z.k);
+      R.enter(an, phase === "switch" ? "static" : phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.7);
+
+      clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(data).join("rect").attr("class", "hit")
+        .attr("x", function (d) { return x(d.k) - x.step() * x.paddingInner() / 2; }).attr("width", x.step())
+        .attr("y", -10).attr("height", h + 30)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          tip.show(R.tipHTML({
+            title: d.k, value: f0(val(d)), unit: LAB[key],
+            rows: [["Ragazze", f0(d.f)], ["Ragazzi", f0(d.m)], ["Quota sul totale psichiatrico", R.pct(d.tot / d.all)]]
+          }), x(d.k) + x.bandwidth() / 2 + m.left, y(val(d)) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+      R.scheduleHeight();
+    }
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>
