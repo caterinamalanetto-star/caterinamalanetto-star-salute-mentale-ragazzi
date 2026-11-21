@@ -20,8 +20,8 @@
 <body>
 <main class="radar">
   <header>
-    <h1 class="r-title">Disagio psichico, gli accessi dei ragazzi al pronto soccorso crescono del 53%</h1>
-    <p class="r-sub">Accessi in pronto soccorso con diagnosi psichiatrica di bambini e ragazzi fino a 17 anni, Italia. Dal 2021 crescono più in fretta di quelli degli adulti</p>
+    <h1 class="r-title">Pronto soccorso, il disagio psichico dei ragazzi cresce più di quello degli adulti</h1>
+    <p class="r-sub">Accessi in pronto soccorso con diagnosi psichiatrica di bambini e ragazzi fino a 17 anni, Italia. Dopo il crollo del 2020, dovuto alla pandemia, sono tornati al livello del 2019</p>
   </header>
 
   <div class="r-big" id="big" aria-hidden="true">
@@ -39,7 +39,7 @@
   <p class="r-note" id="nota"></p>
 
   <footer class="r-foot">
-    <span>Fonte: Ministero della Salute, Rapporto salute mentale 2021-2024 (NSIS-EMUR), tab. 12.6.1</span>
+    <span>Fonte: Ministero della Salute, Rapporto salute mentale 2018-2024 (NSIS-EMUR), tab. 12.6.1</span>
     <span>Elaborazione Radar – QN</span>
   </footer>
 </main>
@@ -65,8 +65,7 @@
     if (R.reduced) bigNum.text(f0(last.tot));
     else { bigNum.text(f0(0)); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, last.tot, f0, "play"); }); }
 
-    d3.select("#nota").text("Accessi, non persone: lo stesso ragazzo può tornare più volte. Il " + first.k +
-      " è ancora un anno condizionato dalla pandemia. Nella vista per sesso mancano i casi con sesso non specificato.");
+    d3.select("#nota").text("Accessi, non persone: lo stesso ragazzo può tornare più volte. Il calo del 2020 e del 2021 è legato alla pandemia, che ha ridotto tutti gli accessi in pronto soccorso. Nella vista per sesso mancano i casi con sesso non specificato.");
 
     var key = "tot";
     var host = document.getElementById("chart");

@@ -14,8 +14,8 @@
 <body>
 <main class="radar">
   <header>
-    <h1 class="r-title">Disturbi del comportamento, accessi quasi triplicati in tre anni</h1>
-    <p class="r-sub">Accessi in pronto soccorso di bambini e ragazzi fino a 17 anni per gruppo di diagnosi psichiatrica: il cerchio vuoto è il 2021, il pallino pieno il 2024</p>
+    <h1 class="r-title">Disturbi del comportamento, accessi più che raddoppiati rispetto al 2019</h1>
+    <p class="r-sub">Accessi in pronto soccorso di bambini e ragazzi fino a 17 anni per gruppo di diagnosi psichiatrica: il cerchio vuoto è il 2019, prima della pandemia, il pallino pieno il 2024</p>
   </header>
 
   <figure class="r-chart" id="chart">
@@ -24,7 +24,7 @@
   <p class="r-note">Accessi, non persone. Gruppi diagnostici del Ministero della Salute; i disturbi d'ansia rientrano nelle sindromi nevrotiche e somatoformi.</p>
 
   <footer class="r-foot">
-    <span>Fonte: Ministero della Salute, Rapporto salute mentale 2021 e 2024 (NSIS-EMUR), tab. 12.6.1</span>
+    <span>Fonte: Ministero della Salute, Rapporto salute mentale 2019 e 2024 (NSIS-EMUR), tab. 12.6.1</span>
     <span>Elaborazione Radar – QN</span>
   </footer>
 </main>
@@ -34,14 +34,14 @@
   var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
   R.loadCSV("../data/diagnosi-pronto-soccorso-minori.csv").then(function (rows) {
     var data = rows.map(function (r) {
-      var a = R.num(r["2021"]), b = R.num(r["2024"]);
+      var a = R.num(r["2019"]), b = R.num(r["2024"]);
       return { k: r["Gruppo diagnostico"], a: a, b: b, ch: b / a - 1, m: R.num(r["Maschi 2024"]), f: R.num(r["Femmine 2024"]) };
     }).sort(function (p, q) { return q.b - p.b; });
     // in rosso il gruppo cresciuto di più tra quelli con almeno mille accessi
     var hot = d3.greatest(data.filter(function (d) { return d.a >= 1000; }), function (d) { return d.ch; });
-    function sgn(v) { return (v >= 0 ? "+" : "−") + fmt(Math.abs(v) * 100, 0) + "%"; }
+    function sgn(v) { var r = Math.round(v * 100); return r === 0 ? "=" : (r > 0 ? "+" : "−") + fmt(Math.abs(r), 0) + "%"; }
 
-    d3.select("#key").html('<span><i class="sw sw--ring" style="border-color:var(--grey)"></i>2021</span><span><i class="sw" style="background:var(--blue)"></i>2024</span><span><i class="sw" style="background:var(--red)"></i>' + hot.k + ", " + sgn(hot.ch) + "</span>");
+    d3.select("#key").html('<span><i class="sw sw--ring" style="border-color:var(--grey)"></i>2019</span><span><i class="sw" style="background:var(--blue)"></i>2024</span><span><i class="sw" style="background:var(--red)"></i>' + hot.k + ", " + sgn(hot.ch) + "</span>");
 
     var host = document.getElementById("chart");
     var tip = R.tooltip(host);
@@ -60,9 +60,9 @@
 
       d3.select(host).select("svg").remove();
       var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
-        .attr("aria-label", "Grafico a punti: dal 2021 al 2024 gli accessi in pronto soccorso di minori crescono in quasi tutti i gruppi di diagnosi. " +
+        .attr("aria-label", "Grafico a punti: dal 2019 al 2024 gli accessi in pronto soccorso di minori cambiano molto da un gruppo di diagnosi all’altro. " +
           hot.k + " passano da " + f0(hot.a) + " a " + f0(hot.b) + ", " + sgn(hot.ch) + ". Il gruppo più numeroso è " + data[0].k + " con " + f0(data[0].b) + " accessi nel 2024.");
-      svg.append("title").text("Accessi di minori in pronto soccorso per gruppo di diagnosi, 2021 e 2024");
+      svg.append("title").text("Accessi di minori in pronto soccorso per gruppo di diagnosi, 2019 e 2024");
       var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
 
       var ticks = x.ticks(narrow ? 3 : 5);
@@ -103,7 +103,7 @@
           var i = data.indexOf(d);
           tip.show(R.tipHTML({
             title: d.k, value: f0(d.b), unit: "accessi nel 2024",
-            rows: [["Nel 2021", f0(d.a)], ["Variazione", sgn(d.ch)], ["Ragazze 2024", f0(d.f)], ["Ragazzi 2024", f0(d.m)]],
+            rows: [["Nel 2019", f0(d.a)], ["Variazione", sgn(d.ch)], ["Ragazze 2024", f0(d.f)], ["Ragazzi 2024", f0(d.m)]],
             note: d.a < 1000 ? "Numeri piccoli: le variazioni percentuali vanno lette con cautela." : null
           }), Math.min(x(d.b) + m.left, W - 20), cy(i) + m.top);
         })

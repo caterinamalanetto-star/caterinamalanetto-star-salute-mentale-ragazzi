@@ -10,7 +10,7 @@ Pagine pubblicate su GitHub Pages. Ogni grafico legge il proprio CSV in `data/`:
 
 ## Dati e fonti
 
-- `data/pronto-soccorso-minori.csv`, `data/diagnosi-pronto-soccorso-minori.csv`: Ministero della Salute, Rapporto salute mentale 2021, 2022, 2023, 2024, tabella 12.6.1 (NSIS-EMUR). I totali per diagnosi coincidono con il totale 0-17 di ogni anno.
+- `data/pronto-soccorso-minori.csv`, `data/diagnosi-pronto-soccorso-minori.csv`: Ministero della Salute, Rapporto salute mentale 2018-2024, tabella 12.6.1 (NSIS-EMUR). I totali per diagnosi coincidono con il totale 0-17 di ogni anno.
 - `data/casi-linee-ascolto.csv`: Telefono Azzurro, bilanci sociali 2019-2025 (dato di ogni anno come riportato nel bilancio di quell'anno).
 - `data/aree-bisogno-1-96-96.csv`, `data/attivazioni-1-96-96.csv`: Telefono Azzurro, dossier «Ascoltare il disagio, leggere i bisogni» (servizio 1.96.96, dati 2025), tabelle 4-7 e figure 4 e 10. «Altre aree» nel grafico dei motivi è calcolata per differenza (100 − somma delle quattro aree).
 
